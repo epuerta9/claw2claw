@@ -3,7 +3,6 @@
 package pake
 
 import (
-	"crypto/elliptic"
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
@@ -39,7 +38,7 @@ func NewSession(codePhrase string, role Role) (*Session, error) {
 	// Initialize PAKE with code as password
 	// Using P-256 curve for good security/performance balance
 	weak := []byte(codePhrase)
-	p, err := pake.InitCurve(weak, int(role), elliptic.P256())
+	p, err := pake.InitCurve(weak, int(role), "p256")
 	if err != nil {
 		return nil, err
 	}

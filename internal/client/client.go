@@ -32,7 +32,7 @@ type Config struct {
 // DefaultConfig returns default client configuration
 func DefaultConfig() *Config {
 	return &Config{
-		RelayURL: "wss://relay.claw2claw.io",
+		RelayURL: "ws://localhost:9009/ws",
 		Timeout:  60 * time.Second,
 	}
 }
@@ -75,13 +75,13 @@ func (c *Client) Send(ctx context.Context, filePath string, codePhrase string) e
 	}
 	defer c.disconnect()
 
-	// Create room with code hash
+	// Create room with code hash and wait for confirmation
 	codeHash := session.GetCodeHashString()
-	if err := c.createRoom(codeHash); err != nil {
+	if err := c.createRoom(ctx, codeHash); err != nil {
 		return err
 	}
 
-	// Wait for receiver to join
+	// Wait for receiver to join (ROOM_READY signal)
 	if err := c.waitForPeer(ctx); err != nil {
 		return err
 	}
@@ -107,7 +107,7 @@ func (c *Client) Send(ctx context.Context, filePath string, codePhrase string) e
 
 	// Send encrypted payload
 	payload := &protocol.EncryptedPayload{
-		Filename:   string(encryptedFilename),
+		Filename:   encryptedFilename,
 		Data:       encryptedContent,
 		TotalParts: 1,
 		PartNum:    0,
@@ -136,9 +136,9 @@ func (c *Client) Receive(ctx context.Context, codePhrase string, outputDir strin
 	}
 	defer c.disconnect()
 
-	// Join room with code hash
+	// Join room with code hash and wait for both peers ready
 	codeHash := session.GetCodeHashString()
-	if err := c.joinRoom(codeHash); err != nil {
+	if err := c.joinRoom(ctx, codeHash); err != nil {
 		return "", err
 	}
 
@@ -171,7 +171,7 @@ func (c *Client) Receive(ctx context.Context, codePhrase string, outputDir strin
 	}
 
 	// Decrypt filename
-	filename, err := crypto.Decrypt(c.sessionKey, []byte(payload.Filename))
+	filename, err := crypto.Decrypt(c.sessionKey, payload.Filename)
 	if err != nil {
 		return "", fmt.Errorf("filename decryption failed: %w", err)
 	}
@@ -219,18 +219,52 @@ func (c *Client) disconnect() {
 	}
 }
 
-// createRoom creates a new room on the relay
-func (c *Client) createRoom(codeHash string) error {
+// createRoom creates a new room on the relay and waits for confirmation
+func (c *Client) createRoom(ctx context.Context, codeHash string) error {
 	payload := &protocol.CreateRoomPayload{CodeHash: codeHash}
 	msg, _ := protocol.NewMessage(protocol.MsgCreateRoom, codeHash, payload)
-	return c.sendMessage(msg)
+	if err := c.sendMessage(msg); err != nil {
+		return err
+	}
+
+	// Wait for ROOM_JOINED confirmation
+	response, err := c.receiveMessage(ctx)
+	if err != nil {
+		return err
+	}
+	if response.Type == protocol.MsgError {
+		var errPayload protocol.ErrorPayload
+		response.GetPayload(&errPayload)
+		return fmt.Errorf("create room failed: %s", errPayload.Message)
+	}
+	if response.Type != protocol.MsgRoomJoined {
+		return fmt.Errorf("expected ROOM_JOINED, got %s", response.Type)
+	}
+	return nil
 }
 
-// joinRoom joins an existing room on the relay
-func (c *Client) joinRoom(codeHash string) error {
+// joinRoom joins an existing room on the relay and waits for confirmation
+func (c *Client) joinRoom(ctx context.Context, codeHash string) error {
 	payload := &protocol.JoinRoomPayload{CodeHash: codeHash}
 	msg, _ := protocol.NewMessage(protocol.MsgJoinRoom, codeHash, payload)
-	return c.sendMessage(msg)
+	if err := c.sendMessage(msg); err != nil {
+		return err
+	}
+
+	// Wait for ROOM_READY (sent when both peers have joined)
+	response, err := c.receiveMessage(ctx)
+	if err != nil {
+		return err
+	}
+	if response.Type == protocol.MsgError {
+		var errPayload protocol.ErrorPayload
+		response.GetPayload(&errPayload)
+		return fmt.Errorf("join room failed: %s", errPayload.Message)
+	}
+	if response.Type != protocol.MsgRoomReady {
+		return fmt.Errorf("expected ROOM_READY, got %s", response.Type)
+	}
+	return nil
 }
 
 // waitForPeer waits for the other party to join the room

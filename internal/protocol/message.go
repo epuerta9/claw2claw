@@ -73,7 +73,7 @@ type PakePayload struct {
 
 // EncryptedPayload contains encrypted content
 type EncryptedPayload struct {
-	Filename   string `json:"filename"`   // Original filename (encrypted separately)
+	Filename   []byte `json:"filename"`   // Encrypted filename
 	Data       []byte `json:"data"`       // Encrypted content
 	TotalParts int    `json:"total_parts"` // For chunked transfers
 	PartNum    int    `json:"part_num"`    // Current part (0-indexed)
