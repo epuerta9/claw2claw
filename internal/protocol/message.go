@@ -10,11 +10,15 @@ import (
 type MessageType string
 
 const (
-	// Room management
+	// Room management - Ephemeral (code phrase)
 	MsgCreateRoom MessageType = "CREATE_ROOM"
 	MsgJoinRoom   MessageType = "JOIN_ROOM"
 	MsgRoomJoined MessageType = "ROOM_JOINED"
 	MsgRoomReady  MessageType = "ROOM_READY"
+
+	// Room management - Persistent (UUID)
+	MsgCreatePersistent MessageType = "CREATE_PERSISTENT" // Create persistent room
+	MsgJoinByID         MessageType = "JOIN_BY_ID"        // Join by UUID
 
 	// PAKE exchange
 	MsgPakeA MessageType = "PAKE_A" // Sender's PAKE message
@@ -64,6 +68,23 @@ type CreateRoomPayload struct {
 // JoinRoomPayload is sent when joining an existing room
 type JoinRoomPayload struct {
 	CodeHash string `json:"code_hash"` // Must match creator's hash
+}
+
+// CreatePersistentPayload is sent when creating a persistent room
+type CreatePersistentPayload struct {
+	TTLHours int    `json:"ttl_hours"` // 0 = default 24h, -1 = channel (permanent)
+	Name     string `json:"name"`      // Optional room name
+}
+
+// JoinByIDPayload is sent when joining a room by UUID
+type JoinByIDPayload struct {
+	RoomID string `json:"room_id"` // UUID of persistent room
+}
+
+// RoomCreatedPayload is returned after persistent room creation
+type RoomCreatedPayload struct {
+	RoomID    string `json:"room_id"`    // UUID to share
+	ExpiresAt int64  `json:"expires_at"` // Unix timestamp
 }
 
 // PakePayload contains PAKE exchange data

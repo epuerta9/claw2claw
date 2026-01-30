@@ -191,6 +191,146 @@ func (c *Client) Receive(ctx context.Context, codePhrase string, outputDir strin
 	return outputPath, nil
 }
 
+// SendPersistentWithCallback sends a file to a persistent room, calling onRoomCreated with the UUID
+// This allows the caller to display the room ID before waiting for the receiver
+func (c *Client) SendPersistentWithCallback(ctx context.Context, filePath string, codePhrase string, ttlHours int, onRoomCreated func(roomID string)) error {
+	// Read file content
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to read file: %w", err)
+	}
+	filename := filepath.Base(filePath)
+
+	// Create PAKE session (code phrase is used for encryption key derivation)
+	session, err := pake.NewSession(codePhrase, pake.RoleSender)
+	if err != nil {
+		return fmt.Errorf("failed to create PAKE session: %w", err)
+	}
+
+	// Connect to relay
+	if err := c.connect(ctx); err != nil {
+		return err
+	}
+	defer c.disconnect()
+
+	// Create persistent room
+	roomID, err := c.createPersistentRoom(ctx, ttlHours)
+	if err != nil {
+		return err
+	}
+
+	// Callback with room ID so caller can display it
+	if onRoomCreated != nil {
+		onRoomCreated(roomID)
+	}
+
+	// Wait for receiver to join
+	if err := c.waitForPeer(ctx); err != nil {
+		return err
+	}
+
+	// PAKE exchange
+	sessionKey, err := c.performPakeExchange(ctx, session, true)
+	if err != nil {
+		return err
+	}
+	c.sessionKey = sessionKey
+
+	// Encrypt and send content
+	encryptedContent, err := crypto.Encrypt(c.sessionKey, content)
+	if err != nil {
+		return fmt.Errorf("encryption failed: %w", err)
+	}
+
+	encryptedFilename, err := crypto.Encrypt(c.sessionKey, []byte(filename))
+	if err != nil {
+		return fmt.Errorf("filename encryption failed: %w", err)
+	}
+
+	payload := &protocol.EncryptedPayload{
+		Filename:   encryptedFilename,
+		Data:       encryptedContent,
+		TotalParts: 1,
+		PartNum:    0,
+	}
+
+	msg, _ := protocol.NewMessage(protocol.MsgEncrypted, roomID, payload)
+	if err := c.sendMessage(msg); err != nil {
+		return err
+	}
+
+	// Wait for ACK
+	return c.waitForAck(ctx)
+}
+
+// ReceivePersistent receives a file from a persistent room using UUID
+func (c *Client) ReceivePersistent(ctx context.Context, roomID string, codePhrase string, outputDir string) (string, error) {
+	// Create PAKE session (must use same code phrase as sender)
+	session, err := pake.NewSession(codePhrase, pake.RoleReceiver)
+	if err != nil {
+		return "", fmt.Errorf("failed to create PAKE session: %w", err)
+	}
+
+	// Connect to relay
+	if err := c.connect(ctx); err != nil {
+		return "", err
+	}
+	defer c.disconnect()
+
+	// Join room by UUID
+	if err := c.joinRoomByID(ctx, roomID); err != nil {
+		return "", err
+	}
+
+	// PAKE exchange
+	sessionKey, err := c.performPakeExchange(ctx, session, false)
+	if err != nil {
+		return "", err
+	}
+	c.sessionKey = sessionKey
+
+	// Receive encrypted content
+	msg, err := c.receiveMessage(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	if msg.Type != protocol.MsgEncrypted {
+		return "", fmt.Errorf("unexpected message type: %s", msg.Type)
+	}
+
+	var payload protocol.EncryptedPayload
+	if err := msg.GetPayload(&payload); err != nil {
+		return "", err
+	}
+
+	// Decrypt content
+	content, err := crypto.Decrypt(c.sessionKey, payload.Data)
+	if err != nil {
+		return "", fmt.Errorf("decryption failed: %w", err)
+	}
+
+	// Decrypt filename
+	filename, err := crypto.Decrypt(c.sessionKey, payload.Filename)
+	if err != nil {
+		return "", fmt.Errorf("filename decryption failed: %w", err)
+	}
+
+	// Write to output
+	outputPath := filepath.Join(outputDir, string(filename))
+	if err := os.WriteFile(outputPath, content, 0644); err != nil {
+		return "", fmt.Errorf("failed to write file: %w", err)
+	}
+
+	// Send ACK
+	ackMsg, _ := protocol.NewMessage(protocol.MsgAck, roomID, nil)
+	if err := c.sendMessage(ackMsg); err != nil {
+		return "", err
+	}
+
+	return outputPath, nil
+}
+
 // connect establishes WebSocket connection to relay
 func (c *Client) connect(ctx context.Context) error {
 	c.connMu.Lock()
@@ -247,6 +387,62 @@ func (c *Client) createRoom(ctx context.Context, codeHash string) error {
 func (c *Client) joinRoom(ctx context.Context, codeHash string) error {
 	payload := &protocol.JoinRoomPayload{CodeHash: codeHash}
 	msg, _ := protocol.NewMessage(protocol.MsgJoinRoom, codeHash, payload)
+	if err := c.sendMessage(msg); err != nil {
+		return err
+	}
+
+	// Wait for ROOM_READY (sent when both peers have joined)
+	response, err := c.receiveMessage(ctx)
+	if err != nil {
+		return err
+	}
+	if response.Type == protocol.MsgError {
+		var errPayload protocol.ErrorPayload
+		response.GetPayload(&errPayload)
+		return fmt.Errorf("join room failed: %s", errPayload.Message)
+	}
+	if response.Type != protocol.MsgRoomReady {
+		return fmt.Errorf("expected ROOM_READY, got %s", response.Type)
+	}
+	return nil
+}
+
+// createPersistentRoom creates a persistent room and returns the UUID
+func (c *Client) createPersistentRoom(ctx context.Context, ttlHours int) (string, error) {
+	payload := &protocol.CreatePersistentPayload{TTLHours: ttlHours}
+	msg, _ := protocol.NewMessage(protocol.MsgCreatePersistent, "", payload)
+	if err := c.sendMessage(msg); err != nil {
+		return "", err
+	}
+
+	// Wait for ROOM_JOINED with room ID
+	response, err := c.receiveMessage(ctx)
+	if err != nil {
+		return "", err
+	}
+	if response.Type == protocol.MsgError {
+		var errPayload protocol.ErrorPayload
+		response.GetPayload(&errPayload)
+		return "", fmt.Errorf("create persistent room failed: %s", errPayload.Message)
+	}
+	if response.Type != protocol.MsgRoomJoined {
+		return "", fmt.Errorf("expected ROOM_JOINED, got %s", response.Type)
+	}
+
+	// Extract room ID from response
+	var createdPayload protocol.RoomCreatedPayload
+	if err := response.GetPayload(&createdPayload); err != nil {
+		// Fallback to using RoomID from message
+		return response.RoomID, nil
+	}
+
+	return createdPayload.RoomID, nil
+}
+
+// joinRoomByID joins a room by its UUID (for persistent rooms)
+func (c *Client) joinRoomByID(ctx context.Context, roomID string) error {
+	payload := &protocol.JoinByIDPayload{RoomID: roomID}
+	msg, _ := protocol.NewMessage(protocol.MsgJoinByID, roomID, payload)
 	if err := c.sendMessage(msg); err != nil {
 		return err
 	}
