@@ -33,5 +33,6 @@ Thumbs.db
 config.local.yaml
 *.local.yaml
 
-# Received files (default output)
+# Received shared context (default: .claw/received/)
+.claw/received/
 received/

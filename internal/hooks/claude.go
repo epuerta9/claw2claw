@@ -3,8 +3,10 @@ package hooks
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"os"
 	"path/filepath"
 	"time"
@@ -161,7 +163,10 @@ func GenerateCodePhrase() string {
 }
 
 func randomInt(max int) int {
-	// Simple pseudo-random for code phrase generation
-	// In production, use crypto/rand
-	return int(time.Now().UnixNano() % int64(max))
+	n, err := rand.Int(rand.Reader, big.NewInt(int64(max)))
+	if err != nil {
+		// Fallback to time-based if crypto/rand fails (shouldn't happen)
+		return int(time.Now().UnixNano() % int64(max))
+	}
+	return int(n.Int64())
 }

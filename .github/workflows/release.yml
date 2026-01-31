@@ -1,0 +1,102 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build binaries
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Get version
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          BINARY_NAME="claw"
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            BINARY_NAME="claw.exe"
+          fi
+          go build -ldflags="-s -w -X main.Version=${{ steps.version.outputs.VERSION }}" -o ${BINARY_NAME} ./cmd/claw
+
+      - name: Package
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          BINARY_NAME="claw"
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            BINARY_NAME="claw.exe"
+            zip claw2claw_${VERSION}_${{ matrix.goos }}_${{ matrix.goarch }}.zip ${BINARY_NAME} README.md LICENSE
+          else
+            tar -czvf claw2claw_${VERSION}_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz ${BINARY_NAME} README.md LICENSE
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: claw2claw_${{ steps.version.outputs.VERSION }}_${{ matrix.goos }}_${{ matrix.goarch }}
+          path: claw2claw_*
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -la artifacts/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: claw2claw v${{ steps.version.outputs.VERSION }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            artifacts/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

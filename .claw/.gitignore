@@ -1,0 +1,5 @@
+# Ignore all received files - these are shared context, not project files
+received/
+
+# Keep this gitignore
+!.gitignore

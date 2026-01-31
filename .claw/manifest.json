@@ -1,0 +1,16 @@
+{
+  "version": "1.0",
+  "updated_at": "2026-01-30T23:38:33.81497183-06:00",
+  "files": {
+    "prod-mixed.md": {
+      "filename": "prod-mixed.md",
+      "received_at": "2026-01-30T23:38:33.810518507-06:00",
+      "last_read_at": "2026-01-30T23:38:33.814971699-06:00",
+      "content_hash": "a1f42b30e2ef184ef2c37b29d063b48ccb37957beb7836c11970cba8a049052a",
+      "size": 310,
+      "sequence": 1,
+      "is_new": false
+    }
+  },
+  "channels": {}
+}
