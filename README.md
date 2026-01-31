@@ -30,12 +30,12 @@ When working with AI assistants like Claude Code, you often need to share contex
 ### Quick Install (Recommended)
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/epuerta9/claw2claw/main/install.sh | bash
+curl -sSL https://github.com/epuerta9/claw2claw/raw/refs/heads/main/install.sh | bash
 ```
 
 Or with wget:
 ```bash
-wget -qO- https://raw.githubusercontent.com/epuerta9/claw2claw/main/install.sh | bash
+wget -qO- https://github.com/epuerta9/claw2claw/raw/refs/heads/main/install.sh | bash
 ```
 
 This will:
@@ -47,13 +47,13 @@ This will:
 
 ```bash
 # Install to custom location
-curl -sSL https://raw.githubusercontent.com/epuerta9/claw2claw/main/install.sh | bash -s -- -p ~/bin
+curl -sSL https://github.com/epuerta9/claw2claw/raw/refs/heads/main/install.sh | bash -s -- -p ~/bin
 
 # Install specific version
-curl -sSL https://raw.githubusercontent.com/epuerta9/claw2claw/main/install.sh | bash -s -- -v v1.0.0
+curl -sSL https://github.com/epuerta9/claw2claw/raw/refs/heads/main/install.sh | bash -s -- -v v1.0.0
 
 # Build from source
-curl -sSL https://raw.githubusercontent.com/epuerta9/claw2claw/main/install.sh | bash -s -- --source
+curl -sSL https://github.com/epuerta9/claw2claw/raw/refs/heads/main/install.sh | bash -s -- --source
 ```
 
 ### Using `go install`

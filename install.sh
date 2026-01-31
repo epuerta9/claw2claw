@@ -3,9 +3,9 @@
 #
 #          FILE: install.sh
 #
-#         USAGE: curl -sSL https://raw.githubusercontent.com/epuerta9/claw2claw/main/install.sh | bash
+#         USAGE: curl -sSL https://github.com/epuerta9/claw2claw/raw/refs/heads/main/install.sh | bash
 #                  OR
-#                wget -qO- https://raw.githubusercontent.com/epuerta9/claw2claw/main/install.sh | bash
+#                wget -qO- https://github.com/epuerta9/claw2claw/raw/refs/heads/main/install.sh | bash
 #
 #   DESCRIPTION: claw2claw Installer Script
 #
