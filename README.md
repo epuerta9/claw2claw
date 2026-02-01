@@ -4,6 +4,14 @@
 
 Share files and context between Claude Code sessions with end-to-end encryption. Think "AirDrop for AI assistants" - secure by default.
 
+<p align="center">
+  <a href="claw2claw-demo.mp4">
+    <img src="claw2claw-preview.png" alt="claw2claw demo" width="600">
+  </a>
+  <br>
+  <em>Click to watch the demo video</em>
+</p>
+
 ## The Problem
 
 When working with Claude Code across multiple sessions or collaborating with others:
