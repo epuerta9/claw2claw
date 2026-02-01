@@ -17,7 +17,12 @@ claw2claw enables two AI assistants (like Claude Code) to securely share files a
 ```bash
 # Share a file
 claw send <file>                    # One-time share
-claw send <file> --persistent       # Reusable room
+claw send <file> --persistent       # Reusable room (threaded session)
+
+# Content tracking options (with --persistent and logged in)
+claw send <file> -p                 # Default: preview mode (first 500 chars)
+claw send <file> -p --full          # Save FULL content to your account
+claw send <file> -p --private       # Metadata only, no content saved
 
 # Receive a file
 claw receive <code>                 # One-time
@@ -31,6 +36,10 @@ claw read <filename>
 
 # List received files
 claw list
+
+# Load past session context (for Claude to re-read)
+claw context <session-id>           # Load session with safety wrapper
+claw context <session-id> --raw     # Raw output for piping
 ```
 
 ## Account Commands (Optional)
@@ -62,6 +71,52 @@ claw logout
 - 🔗 **Shareable links** - Get public/unlisted links to sessions
 - 🌐 **Cross-device sync** - Access sessions from any machine
 - 🎨 **Web viewer** - Beautiful threaded view of your shares
+- 📚 **Context reload** - Load past sessions into new Claude conversations
+
+## Content Tracking Modes
+
+When sharing with `--persistent` while logged in, you can choose how much content to save:
+
+| Mode | Flag | What's Saved | Use Case |
+|------|------|--------------|----------|
+| Preview (default) | none | First 500 chars | Quick reference |
+| Full | `--full` | Complete file | Re-read later |
+| Private | `--private` | Metadata only | Maximum privacy |
+
+**Security note:** Content is saved by YOUR CLI to YOUR account via HTTPS. The E2E-encrypted relay never sees any content.
+
+## Threaded Sessions
+
+Multiple files sent to the same persistent room become a **threaded session**:
+
+```bash
+# First file creates the session
+claw send context.md --persistent
+# Room ID: abc123... | Session created: xyz789
+
+# Later, send more files to the SAME room
+claw send update.md --persistent
+# (to same room abc123)
+# → "Adding to session: xyz789 (1 existing messages)"
+```
+
+This creates a conversation-like thread you can view in the web UI or reload later.
+
+## Loading Past Context (For Claude)
+
+To continue a previous conversation, load the session context:
+
+```bash
+# List your sessions
+claw sessions
+
+# Load a specific session's context
+claw context <session-id>
+```
+
+This outputs all messages in a format optimized for Claude to understand the previous context.
+
+**IMPORTANT:** When asking the user about sharing, ask if they want to use `--full` to save content for later re-reading.
 
 ## IMPORTANT: Always Use `claw read` for Received Content
 

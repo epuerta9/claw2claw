@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 )
 
@@ -261,4 +262,147 @@ func OpenDashboard(cfg *Config) error {
 	url := cfg.BaseURL + "/dashboard"
 	openBrowser(url)
 	return nil
+}
+
+// CreateSession creates a new session via the API
+func CreateSession(cfg *Config, title, roomID string) (*Session, error) {
+	if !cfg.LoggedIn {
+		return nil, fmt.Errorf("not logged in")
+	}
+
+	body := fmt.Sprintf(`{"title":%q,"room_id":%q,"visibility":"private"}`, title, roomID)
+
+	req, _ := http.NewRequest("POST", cfg.BaseURL+"/api/v1/sessions", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+cfg.Token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to create session: %d", resp.StatusCode)
+	}
+
+	var session Session
+	if err := json.NewDecoder(resp.Body).Decode(&session); err != nil {
+		return nil, err
+	}
+
+	return &session, nil
+}
+
+// FindOrCreateSession finds existing session by room_id or creates a new one
+func FindOrCreateSession(cfg *Config, title, roomID string) (*Session, bool, error) {
+	if !cfg.LoggedIn {
+		return nil, false, fmt.Errorf("not logged in")
+	}
+
+	body := fmt.Sprintf(`{"title":%q,"room_id":%q}`, title, roomID)
+
+	req, _ := http.NewRequest("POST", cfg.BaseURL+"/api/v1/sessions/find-or-create", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+cfg.Token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, false, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, false, fmt.Errorf("failed to find/create session: %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Session *Session `json:"session"`
+		Created bool     `json:"created"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, false, err
+	}
+
+	return result.Session, result.Created, nil
+}
+
+// AddMessage adds a message to a session (preview mode - limited content)
+func AddMessage(cfg *Config, sessionID, direction, filename string, fileSize int64, preview string) error {
+	return AddMessageWithContent(cfg, sessionID, direction, filename, fileSize, preview, "", "preview")
+}
+
+// AddMessageWithContent adds a message with full content support
+// contentMode: "none" (metadata only), "preview" (truncated), "full" (complete content)
+func AddMessageWithContent(cfg *Config, sessionID, direction, filename string, fileSize int64, preview, content, contentMode string) error {
+	if !cfg.LoggedIn {
+		return fmt.Errorf("not logged in")
+	}
+
+	body := fmt.Sprintf(`{"direction":%q,"filename":%q,"file_size":%d,"preview":%q,"content":%q,"content_mode":%q}`,
+		direction, filename, fileSize, preview, content, contentMode)
+
+	req, _ := http.NewRequest("POST", cfg.BaseURL+"/api/v1/sessions/"+sessionID+"/messages",
+		strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+cfg.Token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to add message: %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
+// SessionContext represents session content for Claude to re-read
+type SessionContext struct {
+	Session  *Session  `json:"session"`
+	Context  string    `json:"context"`  // Formatted markdown context
+	Messages []Message `json:"messages"`
+}
+
+// Message represents a message in a session
+type Message struct {
+	ID          string    `json:"id"`
+	SessionID   string    `json:"session_id"`
+	Direction   string    `json:"direction"`
+	Filename    string    `json:"filename"`
+	FileSize    int64     `json:"file_size"`
+	Preview     string    `json:"preview,omitempty"`
+	Content     string    `json:"content,omitempty"`
+	ContentMode string    `json:"content_mode"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+// GetSessionContext retrieves full session content for Claude to re-read
+func GetSessionContext(cfg *Config, sessionID string) (*SessionContext, error) {
+	if !cfg.LoggedIn {
+		return nil, fmt.Errorf("not logged in")
+	}
+
+	req, _ := http.NewRequest("GET", cfg.BaseURL+"/api/v1/sessions/"+sessionID+"/context", nil)
+	req.Header.Set("Authorization", "Bearer "+cfg.Token)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to get session context: %d", resp.StatusCode)
+	}
+
+	var ctx SessionContext
+	if err := json.NewDecoder(resp.Body).Decode(&ctx); err != nil {
+		return nil, err
+	}
+
+	return &ctx, nil
 }

@@ -1,0 +1,29 @@
+{
+  "name": "claw2claw",
+  "version": "1.0.0",
+  "description": "Secure AI-to-AI context sharing with E2E encryption and prompt injection protection",
+  "author": "epuerta9",
+  "homepage": "https://github.com/epuerta9/claw2claw",
+  "repository": "https://github.com/epuerta9/claw2claw",
+  "license": "MIT",
+  "keywords": [
+    "context-sharing",
+    "encryption",
+    "security",
+    "collaboration",
+    "prompt-injection-protection"
+  ],
+  "skills": ["claw2claw"],
+  "commands": [],
+  "agents": [],
+  "hooks": [],
+  "requirements": {
+    "claude-code": ">=2.0.12"
+  },
+  "install": {
+    "steps": [
+      "curl -sSL https://github.com/epuerta9/claw2claw/raw/refs/heads/main/install.sh | bash"
+    ],
+    "post_install": "Run 'claw --help' to verify installation"
+  }
+}

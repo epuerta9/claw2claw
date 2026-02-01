@@ -26,6 +26,8 @@ var (
 	persistent  bool
 	rawOutput   bool   // For read command - skip safety wrapper
 	channelName string // For channel create
+	fullContent bool   // For send command - save full content to account
+	privateMode bool   // For send command - metadata only, no content
 )
 
 func main() {
@@ -54,6 +56,8 @@ Use --persistent to create a persistent room with a UUID (harder to guess).`,
 	}
 	sendCmd.Flags().BoolVarP(&persistent, "persistent", "p", false, "Create a persistent room (UUID-based, longer lived)")
 	sendCmd.Flags().IntVar(&ttlHours, "ttl", 24, "TTL for persistent rooms in hours (-1 for permanent)")
+	sendCmd.Flags().BoolVar(&fullContent, "full", false, "Save full file content to your account (for later re-reading)")
+	sendCmd.Flags().BoolVar(&privateMode, "private", false, "Metadata only - don't save any content to account")
 
 	// ========================
 	// Receive Command
@@ -207,8 +211,24 @@ Examples:
 		RunE:  runWhoami,
 	}
 
+	contextCmd := &cobra.Command{
+		Use:   "context <session-id>",
+		Short: "Load session context for Claude to re-read",
+		Long: `Load a session's full content for Claude to re-read.
+
+This outputs the session context in a format optimized for Claude,
+allowing you to reload past shared context into a new session.
+
+Examples:
+  claw context abc123              # Output session context
+  claw context abc123 --raw        # Output without safety wrapper`,
+		Args: cobra.ExactArgs(1),
+		RunE: runContext,
+	}
+	contextCmd.Flags().BoolVar(&rawOutput, "raw", false, "Skip safety wrapper (use with caution)")
+
 	rootCmd.AddCommand(sendCmd, receiveCmd, installCmd, versionCmd, listCmd, readCmd, newCmd, channelCmd)
-	rootCmd.AddCommand(loginCmd, logoutCmd, sessionsCmd, openCmd, whoamiCmd)
+	rootCmd.AddCommand(loginCmd, logoutCmd, sessionsCmd, openCmd, whoamiCmd, contextCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -219,9 +239,13 @@ func runSend(cmd *cobra.Command, args []string) error {
 	filePath := args[0]
 
 	// Check file exists
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+	fileInfo, err := os.Stat(filePath)
+	if os.IsNotExist(err) {
 		return fmt.Errorf("file not found: %s", filePath)
 	}
+
+	// Check if logged in for session tracking
+	acctCfg, _ := account.LoadConfig()
 
 	// Generate code phrase for encryption
 	code := hooks.GenerateCodePhrase()
@@ -243,9 +267,26 @@ func runSend(cmd *cobra.Command, args []string) error {
 		fmt.Printf("🔑 Encryption code: %s\n", code)
 
 		var createdRoomID string
+		var activeSession *account.Session
+		var isNewSession bool
 		onRoomCreated := func(roomID string) {
 			createdRoomID = roomID
 			fmt.Printf("🆔 Room ID: %s\n", roomID)
+
+			// Find or create session if logged in (supports threaded sessions)
+			if acctCfg != nil && acctCfg.LoggedIn {
+				session, created, err := account.FindOrCreateSession(acctCfg, filepath.Base(filePath), roomID)
+				if err == nil {
+					activeSession = session
+					isNewSession = created
+					if created {
+						fmt.Printf("📝 Session created: %s\n", session.ID)
+					} else {
+						fmt.Printf("📝 Adding to session: %s (%d existing messages)\n", session.ID, session.MessageCount)
+					}
+				}
+			}
+
 			fmt.Println("⏳ Waiting for receiver to connect...")
 			fmt.Printf("\n📋 Share with receiver:\n")
 			fmt.Printf("   claw receive %s --code %s\n\n", roomID, code)
@@ -256,8 +297,49 @@ func runSend(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("transfer failed: %w", err)
 		}
 
+		// Add message record if session exists
+		if activeSession != nil {
+			// Determine content mode based on flags
+			var preview, content, contentMode string
+
+			if privateMode {
+				// Metadata only - no content saved
+				contentMode = "none"
+			} else if fullContent {
+				// Full content mode - save everything
+				if fileContent, err := os.ReadFile(filePath); err == nil {
+					content = string(fileContent)
+					if len(content) > 500 {
+						preview = content[:500] + "..."
+					} else {
+						preview = content
+					}
+				}
+				contentMode = "full"
+			} else {
+				// Default: preview mode (first 500 chars for small files)
+				if fileInfo.Size() < 500 {
+					if fileContent, err := os.ReadFile(filePath); err == nil {
+						preview = string(fileContent)
+					}
+				}
+				contentMode = "preview"
+			}
+
+			if err := account.AddMessageWithContent(acctCfg, activeSession.ID, "sent", filepath.Base(filePath), fileInfo.Size(), preview, content, contentMode); err != nil {
+				fmt.Printf("⚠️  Failed to track message: %v\n", err)
+			} else {
+				modeLabel := map[string]string{"none": "metadata only", "preview": "preview", "full": "full content"}[contentMode]
+				fmt.Printf("📊 Message tracked: %d bytes (%s)\n", fileInfo.Size(), modeLabel)
+			}
+		}
+
 		fmt.Println("✅ Transfer complete!")
+		if activeSession != nil {
+			fmt.Printf("📂 View in browser: claw open %s\n", activeSession.ID)
+		}
 		_ = createdRoomID // Used in callback output
+		_ = isNewSession  // Informational
 	} else {
 		// Ephemeral room mode - uses code phrase
 		fmt.Printf("📤 Sharing: %s\n", filepath.Base(filePath))
@@ -830,6 +912,45 @@ func runWhoami(cmd *cobra.Command, args []string) error {
 		fmt.Printf("   Email: %s\n", cfg.Email)
 	}
 	fmt.Printf("   Server: %s\n", cfg.BaseURL)
+
+	return nil
+}
+
+func runContext(cmd *cobra.Command, args []string) error {
+	sessionID := args[0]
+
+	cfg, err := account.LoadConfig()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	if !cfg.LoggedIn {
+		return fmt.Errorf("not logged in. Use 'claw login' first")
+	}
+
+	ctx, err := account.GetSessionContext(cfg, sessionID)
+	if err != nil {
+		return fmt.Errorf("failed to get session context: %w", err)
+	}
+
+	if rawOutput {
+		// Raw output - just print the context
+		fmt.Println(ctx.Context)
+	} else {
+		// Wrapped output with safety header
+		fmt.Println("═══════════════════════════════════════════════════════════════")
+		fmt.Println("📚 SESSION CONTEXT - PREVIOUSLY SHARED CONTENT")
+		fmt.Println("═══════════════════════════════════════════════════════════════")
+		fmt.Printf("Session: %s\n", ctx.Session.Title)
+		fmt.Printf("Messages: %d | Total: %d bytes\n", ctx.Session.MessageCount, ctx.Session.TotalBytes)
+		fmt.Println("───────────────────────────────────────────────────────────────")
+		fmt.Println()
+		fmt.Println(ctx.Context)
+		fmt.Println("═══════════════════════════════════════════════════════════════")
+		fmt.Println("ℹ️  This is previously shared context from your session history.")
+		fmt.Println("   You can reference this content for continuity.")
+		fmt.Println("═══════════════════════════════════════════════════════════════")
+	}
 
 	return nil
 }
