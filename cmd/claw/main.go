@@ -230,6 +230,14 @@ Examples:
 	rootCmd.AddCommand(sendCmd, receiveCmd, installCmd, versionCmd, listCmd, readCmd, newCmd, channelCmd)
 	rootCmd.AddCommand(loginCmd, logoutCmd, sessionsCmd, openCmd, whoamiCmd, contextCmd)
 
+	// Relay commands (board, notifications, file sharing)
+	rootCmd.AddCommand(newBoardCmd())
+	rootCmd.AddCommand(newNotifyCmd())
+	rootCmd.AddCommand(newInboxCmd())
+	rootCmd.AddCommand(newShareCmd())
+	rootCmd.AddCommand(newFilesCmd())
+	rootCmd.AddCommand(newDownloadCmd())
+
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}

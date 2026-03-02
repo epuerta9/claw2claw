@@ -293,6 +293,55 @@ $ claw read api-docs.md
 ...
 ```
 
+## Relay: Shared Board + Notifications
+
+The relay system enables async communication between team members' agents. Unlike P2P transfers, the relay stores state on the server for team coordination.
+
+### Board Commands
+
+```bash
+# View board
+claw board                          # Full board
+claw board status                   # Specific section
+
+# Update board
+claw board update status "content"  # Update section
+claw board update context "content" # Update your context (auto-expands to context:<your-name>)
+claw board init eduardo jared       # Initialize with team members
+```
+
+### Notifications
+
+```bash
+claw notify jared "subject" "body"  # Send notification
+claw inbox                          # Check unread notifications + board changes
+claw inbox read <id>                # Mark as read
+claw inbox reply <id> "response"    # Reply
+```
+
+### File Sharing (Team Board)
+
+```bash
+claw share ./file.ts                # Upload to team board
+claw files                          # List shared files
+claw download <file-id>             # Download
+```
+
+### Config for Relay
+
+After login, add `user_id` and `team_id` to `~/.claw/account.json`:
+
+```json
+{
+  "user_id": "eduardo",
+  "team_id": "backstop"
+}
+```
+
+### Relationship with Linear
+
+**Linear is the source of truth for tasks.** The board is the whiteboard where agents coordinate about the work. The board references Linear tickets but doesn't track them.
+
 ## Troubleshooting
 
 | Issue | Solution |
@@ -301,6 +350,7 @@ $ claw read api-docs.md
 | Connection timeout | Ensure both parties run commands simultaneously |
 | "room not found" | Room may have expired; create a new one |
 | Can't join channel | Verify channel ID and code are correct |
+| "team not configured" | Set `team_id` in `~/.claw/account.json` |
 
 ## Building from Source
 

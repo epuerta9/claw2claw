@@ -16,11 +16,14 @@ import (
 
 // Config holds account configuration
 type Config struct {
-	Token    string `json:"token"`
-	Email    string `json:"email"`
-	Name     string `json:"name"`
-	BaseURL  string `json:"base_url"`
-	LoggedIn bool   `json:"logged_in"`
+	Token          string `json:"token"`
+	Email          string `json:"email"`
+	Name           string `json:"name"`
+	BaseURL        string `json:"base_url"`
+	LoggedIn       bool   `json:"logged_in"`
+	UserID         string `json:"user_id,omitempty"`
+	TeamID         string `json:"team_id,omitempty"`
+	LastBoardCheck string `json:"last_board_check,omitempty"` // RFC3339 timestamp
 }
 
 const configFileName = ".claw/account.json"
