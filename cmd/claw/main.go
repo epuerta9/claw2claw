@@ -426,6 +426,9 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	fmt.Println("\nYou can now use:")
 	fmt.Println("  /share <file>   - Share a file")
 	fmt.Println("  /receive <code> - Receive a shared file")
+	fmt.Println("\nInbox hook registered:")
+	fmt.Println("  UserPromptSubmit → c2c inbox --quiet --if-stale 30m")
+	fmt.Println("  (checks for new notifications every 30 minutes)")
 	return nil
 }
 

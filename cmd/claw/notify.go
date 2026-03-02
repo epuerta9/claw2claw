@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/epuerta9/claw2claw/internal/account"
 	"github.com/spf13/cobra"
@@ -13,6 +14,7 @@ var (
 	notifyType string
 	jsonOutput bool
 	quietMode  bool
+	ifStale    string
 )
 
 func newNotifyCmd() *cobra.Command {
@@ -45,6 +47,8 @@ This is the session-start command - run it to see what's happened since you last
 	}
 	inboxCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output as JSON (for hooks)")
 	inboxCmd.Flags().BoolVar(&quietMode, "quiet", false, "Suppress non-essential output")
+	inboxCmd.Flags().StringVar(&ifStale, "if-stale", "", "Only check if last check was longer ago than this duration (e.g. 30m, 1h)")
+
 
 	readCmd := &cobra.Command{
 		Use:   "read <notification-id>",
@@ -90,6 +94,26 @@ func runNotify(cmd *cobra.Command, args []string) error {
 }
 
 func runInbox(cmd *cobra.Command, args []string) error {
+	// If --if-stale is set, check whether we need to run at all
+	if ifStale != "" {
+		staleDuration, err := time.ParseDuration(ifStale)
+		if err != nil {
+			return fmt.Errorf("invalid --if-stale duration %q: %w", ifStale, err)
+		}
+
+		cfg, err := account.LoadConfig()
+		if err != nil {
+			// No config yet → treat as stale, proceed with normal check
+		} else if cfg.LastBoardCheck != "" {
+			lastCheck, err := time.Parse(time.RFC3339, cfg.LastBoardCheck)
+			if err == nil && time.Since(lastCheck) < staleDuration {
+				// Not stale — exit silently with no network call
+				return nil
+			}
+		}
+		// Stale (or no LastBoardCheck) → fall through to normal inbox check
+	}
+
 	cfg, err := account.LoadConfig()
 	if err != nil {
 		if quietMode {

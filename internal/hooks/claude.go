@@ -72,10 +72,98 @@ func RegisterHooks() error {
 			return err
 		}
 
-		return os.WriteFile(configPath, data, 0644)
+		if err := os.WriteFile(configPath, data, 0644); err != nil {
+			return err
+		}
+	}
+
+	// Register UserPromptSubmit inbox hook in ~/.claude/settings.json
+	if err := registerInboxHook(homeDir); err != nil {
+		return err
 	}
 
 	return nil
+}
+
+// registerInboxHook adds a UserPromptSubmit hook to ~/.claude/settings.json
+// that runs `c2c inbox --quiet --if-stale 30m` on every prompt.
+func registerInboxHook(homeDir string) error {
+	settingsPath := filepath.Join(homeDir, ".claude", "settings.json")
+
+	// Read existing settings
+	var settings map[string]interface{}
+	if data, err := os.ReadFile(settingsPath); err == nil {
+		if err := json.Unmarshal(data, &settings); err != nil {
+			settings = make(map[string]interface{})
+		}
+	} else {
+		settings = make(map[string]interface{})
+	}
+
+	const inboxCommand = "c2c inbox --quiet --if-stale 30m"
+
+	// Check if our hook already exists
+	if hooksRaw, ok := settings["hooks"]; ok {
+		if hooksMap, ok := hooksRaw.(map[string]interface{}); ok {
+			if upsRaw, ok := hooksMap["UserPromptSubmit"]; ok {
+				if upsList, ok := upsRaw.([]interface{}); ok {
+					for _, entry := range upsList {
+						if entryMap, ok := entry.(map[string]interface{}); ok {
+							if innerHooks, ok := entryMap["hooks"].([]interface{}); ok {
+								for _, h := range innerHooks {
+									if hMap, ok := h.(map[string]interface{}); ok {
+										if cmd, ok := hMap["command"].(string); ok && cmd == inboxCommand {
+											// Already registered
+											return nil
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Build the hook entry
+	hookEntry := map[string]interface{}{
+		"hooks": []interface{}{
+			map[string]interface{}{
+				"type":    "command",
+				"command": inboxCommand,
+			},
+		},
+	}
+
+	// Merge into settings
+	if settings["hooks"] == nil {
+		settings["hooks"] = make(map[string]interface{})
+	}
+	hooksMap, ok := settings["hooks"].(map[string]interface{})
+	if !ok {
+		hooksMap = make(map[string]interface{})
+		settings["hooks"] = hooksMap
+	}
+
+	// Append to existing UserPromptSubmit list or create new
+	if existing, ok := hooksMap["UserPromptSubmit"].([]interface{}); ok {
+		hooksMap["UserPromptSubmit"] = append(existing, hookEntry)
+	} else {
+		hooksMap["UserPromptSubmit"] = []interface{}{hookEntry}
+	}
+
+	// Write back
+	data, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal settings: %w", err)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0755); err != nil {
+		return err
+	}
+
+	return os.WriteFile(settingsPath, data, 0644)
 }
 
 // ShareContext shares a file or content with another Claude user

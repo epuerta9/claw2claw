@@ -87,9 +87,12 @@ claw notify <user> "subject" --type blocker  # Types: question, blocker, mention
 ```bash
 claw inbox                          # Check unread notifications + board changes
 claw inbox --json --quiet           # For session-start hooks (silent if no updates)
+claw inbox --quiet --if-stale 30m   # Only check if last check was >30m ago (for hooks)
 claw inbox read <id>                # Mark notification as read
 claw inbox reply <id> "response"    # Reply to a notification
 ```
+
+The `--if-stale` flag makes inbox checks efficient for hooks: it exits silently with no network call if less than the specified duration has passed since the last check. Supports Go duration syntax (`30m`, `1h`, `5m`).
 
 ### File Sharing (Team Board)
 
@@ -103,6 +106,9 @@ claw download <file-id>             # Download a shared file
 
 ### On session start
 Auto-run `claw inbox` to check for unread notifications and board changes. Surface them to the user.
+
+### Auto-inbox via hook
+After `claw install`, a `UserPromptSubmit` hook is registered in `~/.claude/settings.json` that runs `c2c inbox --quiet --if-stale 30m` on every prompt. This checks for new notifications at most once every 30 minutes, with no network call or output when not stale.
 
 ### When user says "update Jared on what we did today"
 1. Gather context: run `git log --oneline -5`, `git diff --stat`, check current branch
