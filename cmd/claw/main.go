@@ -230,7 +230,8 @@ Examples:
 	rootCmd.AddCommand(sendCmd, receiveCmd, installCmd, versionCmd, listCmd, readCmd, newCmd, channelCmd)
 	rootCmd.AddCommand(loginCmd, logoutCmd, sessionsCmd, openCmd, whoamiCmd, contextCmd)
 
-	// Relay commands (board, notifications, file sharing)
+	// Team + Relay commands (board, notifications, file sharing)
+	rootCmd.AddCommand(newTeamCmd())
 	rootCmd.AddCommand(newBoardCmd())
 	rootCmd.AddCommand(newNotifyCmd())
 	rootCmd.AddCommand(newInboxCmd())
