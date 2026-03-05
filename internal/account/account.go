@@ -40,7 +40,7 @@ func LoadConfig() (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return &Config{BaseURL: "https://claw2claw-relay.fly.dev"}, nil
+			return &Config{BaseURL: "https://claw2claw.cloudshipai.com"}, nil
 		}
 		return nil, err
 	}

@@ -152,7 +152,7 @@ Account and team config lives at `~/.claw/account.json`:
 ```json
 {
   "token": "claw_...",
-  "base_url": "https://claw2claw-relay.fly.dev",
+  "base_url": "https://claw2claw.cloudshipai.com",
   "user_id": "eduardo",
   "team_id": "backstop",
   "last_board_check": "2026-03-01T18:00:00Z"

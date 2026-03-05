@@ -32,7 +32,7 @@ type Config struct {
 // DefaultConfig returns default client configuration
 func DefaultConfig() *Config {
 	return &Config{
-		RelayURL: "wss://claw2claw-relay.fly.dev/ws",
+		RelayURL: "wss://claw2claw.cloudshipai.com/ws",
 		Timeout:  60 * time.Second,
 	}
 }
